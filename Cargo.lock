@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "tabular"
+name = "pretty"
 version = "0.1.0"

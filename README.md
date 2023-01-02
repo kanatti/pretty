@@ -1,2 +1,3 @@
-# tabular
-Command line utility to view json in table form
+# Pretty
+
+View files prettified on CLI
