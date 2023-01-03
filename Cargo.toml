@@ -3,6 +3,13 @@ name = "pretty"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "pretty"
+
+[lib]
+path = "src/lib.rs"
+
 
 [dependencies]
+clap = { version = "4.0.32", features = ["derive"] }
+serde_json = "1.0"
