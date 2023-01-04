@@ -36,9 +36,6 @@ pub fn draw_box(height: usize, width: usize) -> String {
 
 // TODO: Optimize later
 pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
-    let row_count = rows.len() + 1;
-    let column_count = headers.len();
-
     let mut table = String::from(LEFT_TOP);
 
     // Top
