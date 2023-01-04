@@ -1,6 +1,10 @@
-use std::{cmp, collections::HashMap, fs};
+use std::{
+    cmp,
+    collections::{HashMap, HashSet},
+    fs,
+};
 
-use serde_json::{Result, Value};
+use serde_json::Value;
 
 pub mod args;
 pub mod draw;
@@ -8,13 +12,11 @@ pub mod draw;
 use draw::Header;
 
 pub fn run(args: args::Args) {
-    let data = fs::read_to_string(args.file_name).unwrap();
+    let data = fs::read_to_string(&args.file_name).unwrap();
 
-    let value: Result<Value> = serde_json::from_str(&data);
-
-    match value {
-        Ok(val) => {
-            render(val);
+    match serde_json::from_str(&data) {
+        Ok(value) => {
+            render(value, &args);
         }
         Err(e) => {
             println!("{:#?}", e);
@@ -22,25 +24,66 @@ pub fn run(args: args::Args) {
     }
 }
 
-fn render(value: Value) {
+fn render(value: Value, args: &args::Args) {
     match value {
         Value::Array(values) => {
-            render_table(&values);
+            render_table(values, &args.flatten);
         }
         Value::Object(mapped_values) => println!("Will render object"),
         _ => println!("Unexpected path"),
     }
 }
 
-fn render_table(values: &Vec<Value>) {
-    // Get Headers
-    let headers = get_headers(values);
+fn render_table(mut values: Vec<Value>, flatten_fields: &Vec<String>) {
+    if !flatten_fields.is_empty() {
+        values = flatten(values, &flatten_fields);
+    }
+
+    let headers = get_headers(&values);
+
     let rows: Vec<Vec<String>> = values
         .iter()
         .map(|value| value_to_vec(value, &headers))
         .collect();
 
     println!("{}", draw::draw_table(&headers, &rows));
+}
+
+fn flatten(mut values: Vec<Value>, flatten_fields: &Vec<String>) -> Vec<Value> {
+    let headers = get_header_set(&values);
+
+    // TODO: Change to error and handle gracefully
+    let valid_fields: Vec<&String> = flatten_fields
+        .iter()
+        .filter(|&field| headers.contains(&*field))
+        .collect();
+
+    for field in valid_fields {
+        flatten_values(&mut values, field)
+    }
+
+    values
+}
+
+fn flatten_values(values: &mut Vec<Value>, field: &String) {
+    for value in values.iter_mut() {
+        if let Value::Object(value) = value {
+            let inner = value.remove(field);
+
+            match inner {
+                Some(Value::Object(inner)) => {
+                    for (key, val) in inner.into_iter() {
+                        let new_key = format!("{}.{}", field, key);
+                        value.insert(String::from(new_key), val);
+                    }
+                }
+                Some(val) => {
+                    value.insert(String::from(field), val);
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 fn get_headers(values: &Vec<Value>) -> Vec<Header> {
@@ -71,6 +114,21 @@ fn get_headers(values: &Vec<Value>) -> Vec<Header> {
             name,
         })
         .collect()
+}
+
+fn get_header_set(values: &Vec<Value>) -> HashSet<String> {
+    let mut headers: HashSet<String> = HashSet::new();
+
+    values.iter().for_each(|value| match value {
+        Value::Object(map) => {
+            map.keys().for_each(|key| {
+                headers.insert(String::from(key));
+            });
+        }
+        _ => {}
+    });
+
+    headers
 }
 
 fn len(value: &Value) -> usize {
