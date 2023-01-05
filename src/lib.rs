@@ -9,12 +9,12 @@ use serde_json::Value;
 pub mod args;
 pub mod draw;
 
-use draw::Header;
+use draw::{Cell, Header};
 
 pub fn run(args: args::Args) {
-    let data = fs::read_to_string(&args.file_name).unwrap();
+    let data = fs::read_to_string(&args.file).unwrap();
 
-    if args.file_name.ends_with(".jsonl") {
+    if args.file.ends_with(".jsonl") {
         render_json_lines(&data, &args);
     } else {
         render_json(&data, &args);
@@ -26,7 +26,7 @@ fn render_json(data: &str, args: &args::Args) {
 
     match value {
         Value::Array(values) => {
-            render_table(values, &args.flatten);
+            render_table(values, &args);
         }
         Value::Object(mapped_values) => println!("Will render object"),
         _ => println!("Unexpected path"),
@@ -34,19 +34,15 @@ fn render_json(data: &str, args: &args::Args) {
 }
 
 fn render_json_lines(data: &str, args: &args::Args) {
-    let values: Vec<Value> = data.lines().map(|line| {
-        deserialize(line)
-    }).collect();
+    let values: Vec<Value> = data.lines().map(|line| deserialize(line)).collect();
 
-    render_table(values, &args.flatten);
+    render_table(values, &args);
 }
 
 // Handle error better way, that matches Clap style
 fn deserialize(data: &str) -> Value {
     match serde_json::from_str(&data) {
-        Ok(value) => {
-           value
-        }
+        Ok(value) => value,
         Err(e) => {
             eprintln!("Invalid JSON {}", e);
             process::exit(1)
@@ -54,20 +50,19 @@ fn deserialize(data: &str) -> Value {
     }
 }
 
-
-fn render_table(mut values: Vec<Value>, flatten_fields: &Vec<String>) {
-    if !flatten_fields.is_empty() {
-        values = flatten(values, &flatten_fields);
+fn render_table(mut values: Vec<Value>, args: &args::Args) {
+    if !args.flatten.is_empty() {
+        values = flatten(values, &args.flatten);
     }
 
     let headers = get_headers(&values);
 
-    let rows: Vec<Vec<String>> = values
+    let rows: Vec<Vec<Cell>> = values
         .iter()
         .map(|value| value_to_vec(value, &headers))
         .collect();
 
-    println!("{}", draw::draw_table(&headers, &rows));
+    println!("{}", draw::draw_table(&headers, &rows, &args.color));
 }
 
 fn flatten(mut values: Vec<Value>, flatten_fields: &Vec<String>) -> Vec<Value> {
@@ -163,31 +158,31 @@ fn len(value: &Value) -> usize {
     }
 }
 
-fn value_to_vec(value: &Value, headers: &Vec<Header>) -> Vec<String> {
+fn value_to_vec(value: &Value, headers: &Vec<Header>) -> Vec<Cell> {
     match value {
         Value::Object(object) => headers
             .iter()
             .map(|header| {
                 object
                     .get(&header.name)
-                    .map(|val| to_string(val))
-                    .unwrap_or(String::from(""))
+                    .map(|val| to_cell(val))
+                    .unwrap_or(Cell::string(String::from("")))
             })
             .collect(),
         _ => vec![],
     }
 }
 
-fn to_string(value: &Value) -> String {
+fn to_cell(value: &Value) -> Cell {
     match value {
-        Value::Null => String::from("null"),
+        Value::Null => Cell::null(String::from("null")),
         Value::Bool(bool) => match bool {
-            true => String::from("true"),
-            false => String::from("false"),
+            true => Cell::bool(String::from("true")),
+            false => Cell::bool(String::from("false")),
         },
-        Value::Number(n) => n.to_string(),
-        Value::String(s) => format!("\"{}\"", s),
-        Value::Array(_) => String::from("[..]"),
-        Value::Object(_) => String::from("{..}"),
+        Value::Number(n) => Cell::number(n.to_string()),
+        Value::String(s) => Cell::string(format!("\"{}\"", s)),
+        Value::Array(_) => Cell::collapsed(String::from("[..]")),
+        Value::Object(_) => Cell::collapsed(String::from("{..}")),
     }
 }

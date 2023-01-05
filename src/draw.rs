@@ -1,5 +1,9 @@
 use std::iter;
 
+use crate::args::Color;
+
+use colored::*;
+
 const LEFT_TOP: char = '┌';
 const RIGHT_TOP: char = '┐';
 const LEFT_BOTTOM: char = '└';
@@ -20,6 +24,58 @@ pub struct Header {
     pub max_width: usize,
 }
 
+#[derive(Debug)]
+pub struct Cell {
+    content: String,
+    cellType: CellType,
+}
+
+#[derive(Debug)]
+pub enum CellType {
+    Null,
+    Bool,
+    Number,
+    String,
+    Collapsed,
+}
+
+impl Cell {
+    pub fn null(content: String) -> Self {
+        Self {
+            content,
+            cellType: CellType::Null,
+        }
+    }
+
+    pub fn bool(content: String) -> Self {
+        Self {
+            content,
+            cellType: CellType::Bool,
+        }
+    }
+
+    pub fn number(content: String) -> Self {
+        Self {
+            content,
+            cellType: CellType::Number,
+        }
+    }
+
+    pub fn string(content: String) -> Self {
+        Self {
+            content,
+            cellType: CellType::String,
+        }
+    }
+
+    pub fn collapsed(content: String) -> Self {
+        Self {
+            content,
+            cellType: CellType::Collapsed,
+        }
+    }
+}
+
 pub fn draw_box(height: usize, width: usize) -> String {
     let mut chars = row(width, LEFT_TOP, HORIZONTAL, RIGHT_TOP);
     chars.push(NEW_LINE);
@@ -35,7 +91,7 @@ pub fn draw_box(height: usize, width: usize) -> String {
 }
 
 // TODO: Optimize later
-pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
+pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, color: &Color) -> String {
     let mut table = String::from(LEFT_TOP);
 
     // Top
@@ -61,9 +117,8 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
 
     table.push(VERTICAL);
 
-
     for header in headers.iter() {
-        table.push_str(&pad_left(&header.name, header.max_width));
+        table.push_str(&format_header(&header.name, header.max_width, &color));
         table.push(VERTICAL)
     }
 
@@ -84,7 +139,7 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
                     .collect::<String>(),
             )
         }
-    
+
         table.push_str(
             &(0..headers.last().unwrap().max_width)
                 .map(|_| HORIZONTAL)
@@ -98,10 +153,10 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
         table.push(VERTICAL);
 
         for (i, header) in headers.iter().enumerate() {
-            table.push_str(&pad_left(&row[i], header.max_width));
+            table.push_str(&format_cell(&row[i], header.max_width, &color));
             table.push(VERTICAL)
         }
-    
+
         table.push(NEW_LINE);
     }
 
@@ -129,9 +184,37 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<String>>) -> String {
     table
 }
 
-fn pad_left(s: &str, width: usize) -> String {
-    format!("{:<width$}", s, width=width)
+fn format_cell(cell: &Cell, width: usize, color: &Color) -> String {
+    let padded = format!("{:<width$}", cell.content, width = width);
+
+    match color {
+        Color::Never => padded,
+        Color::Auto => colorize(&padded, &cell.cellType), // Fix with atty
+        Color::Always => colorize(&padded, &cell.cellType),
+    }
 }
+
+fn format_header(s: &str, width: usize, color: &Color) -> String {
+    let padded = format!("{:<width$}", s, width = width);
+
+    match color {
+        Color::Never => padded,
+        Color::Auto => padded.blue().bold().to_string(),
+        Color::Always => padded.blue().bold().to_string(),
+    }
+}
+
+fn colorize(content: &str, cell_type: &CellType) -> String {
+    match cell_type {
+        CellType::Null => content.white().dimmed(),
+        CellType::Bool => content.white(),
+        CellType::Number => content.yellow(),
+        CellType::String => content.green(),
+        CellType::Collapsed => content.white().dimmed(),
+    }.to_string()
+}
+
+
 
 fn row(width: usize, start: char, mid: char, end: char) -> Vec<char> {
     iter::once(start)
