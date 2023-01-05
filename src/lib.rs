@@ -1,7 +1,7 @@
 use std::{
     cmp,
     collections::{HashMap, HashSet},
-    fs,
+    fs, process,
 };
 
 use serde_json::Value;
@@ -14,17 +14,16 @@ use draw::Header;
 pub fn run(args: args::Args) {
     let data = fs::read_to_string(&args.file_name).unwrap();
 
-    match serde_json::from_str(&data) {
-        Ok(value) => {
-            render(value, &args);
-        }
-        Err(e) => {
-            println!("{:#?}", e);
-        }
+    if args.file_name.ends_with(".jsonl") {
+        render_json_lines(&data, &args);
+    } else {
+        render_json(&data, &args);
     }
 }
 
-fn render(value: Value, args: &args::Args) {
+fn render_json(data: &str, args: &args::Args) {
+    let value = deserialize(data);
+
     match value {
         Value::Array(values) => {
             render_table(values, &args.flatten);
@@ -33,6 +32,28 @@ fn render(value: Value, args: &args::Args) {
         _ => println!("Unexpected path"),
     }
 }
+
+fn render_json_lines(data: &str, args: &args::Args) {
+    let values: Vec<Value> = data.lines().map(|line| {
+        deserialize(line)
+    }).collect();
+
+    render_table(values, &args.flatten);
+}
+
+// Handle error better way, that matches Clap style
+fn deserialize(data: &str) -> Value {
+    match serde_json::from_str(&data) {
+        Ok(value) => {
+           value
+        }
+        Err(e) => {
+            eprintln!("Invalid JSON {}", e);
+            process::exit(1)
+        }
+    }
+}
+
 
 fn render_table(mut values: Vec<Value>, flatten_fields: &Vec<String>) {
     if !flatten_fields.is_empty() {
