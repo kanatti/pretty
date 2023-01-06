@@ -9,7 +9,7 @@ use serde_json::Value;
 pub mod args;
 pub mod draw;
 
-use draw::{Cell, Header};
+use draw::{Cell, Header, DrawOptions};
 
 pub fn run(args: args::Args) {
     let data = fs::read_to_string(&args.file).unwrap();
@@ -26,9 +26,11 @@ fn render_json(data: &str, args: &args::Args) {
 
     match value {
         Value::Array(values) => {
-            render_table(values, &args);
+            render_table(values, &args, false);
         }
-        Value::Object(mapped_values) => println!("Will render object"),
+        Value::Object(_) => {
+            render_table(vec![value], &args, true);
+        },
         _ => println!("Unexpected path"),
     }
 }
@@ -36,7 +38,7 @@ fn render_json(data: &str, args: &args::Args) {
 fn render_json_lines(data: &str, args: &args::Args) {
     let values: Vec<Value> = data.lines().map(|line| deserialize(line)).collect();
 
-    render_table(values, &args);
+    render_table(values, &args, false);
 }
 
 // Handle error better way, that matches Clap style
@@ -50,7 +52,7 @@ fn deserialize(data: &str) -> Value {
     }
 }
 
-fn render_table(mut values: Vec<Value>, args: &args::Args) {
+fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
     if !args.flatten.is_empty() {
         values = flatten(values, &args.flatten);
     }
@@ -62,7 +64,12 @@ fn render_table(mut values: Vec<Value>, args: &args::Args) {
         .map(|value| value_to_vec(value, &headers))
         .collect();
 
-    println!("{}", draw::draw_table(&headers, &rows, &args.color));
+    let draw_options = DrawOptions {
+        color: args.color,
+        flip
+    };
+
+    println!("{}", draw::draw_table(&headers, &rows, draw_options));
 }
 
 fn flatten(mut values: Vec<Value>, flatten_fields: &Vec<String>) -> Vec<Value> {

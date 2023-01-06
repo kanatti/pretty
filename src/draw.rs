@@ -18,6 +18,13 @@ const VERTICAL_RIGHT: char = '├';
 const SPACE: char = ' ';
 const NEW_LINE: char = '\n';
 
+
+#[derive(Debug)]
+pub struct DrawOptions {
+    pub color: Color,
+    pub flip: bool,
+}
+
 #[derive(Debug)]
 pub struct Header {
     pub name: String,
@@ -91,7 +98,7 @@ pub fn draw_box(height: usize, width: usize) -> String {
 }
 
 // TODO: Optimize later
-pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, color: &Color) -> String {
+pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, options: DrawOptions) -> String {
     let mut table = String::from(LEFT_TOP);
 
     // Top
@@ -118,7 +125,7 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, color: &Color) -> S
     table.push(VERTICAL);
 
     for header in headers.iter() {
-        table.push_str(&format_header(&header.name, header.max_width, &color));
+        table.push_str(&format_header(&header.name, header.max_width, &options.color));
         table.push(VERTICAL)
     }
 
@@ -153,7 +160,7 @@ pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, color: &Color) -> S
         table.push(VERTICAL);
 
         for (i, header) in headers.iter().enumerate() {
-            table.push_str(&format_cell(&row[i], header.max_width, &color));
+            table.push_str(&format_cell(&row[i], header.max_width, &options.color));
             table.push(VERTICAL)
         }
 
