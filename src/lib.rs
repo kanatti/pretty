@@ -7,11 +7,11 @@ use std::{
 use serde_json::{json, Map, Value};
 
 pub mod args;
-pub mod draw;
-pub mod field_path;
+pub mod table;
+pub mod path;
 
-use draw::{Cell, DrawOptions, Header};
-use field_path::{FieldPath, Selector};
+use table::{Cell, DrawOptions, Header};
+use path::{FieldPath, Selector};
 
 pub fn run(args: args::Args) {
     let data = fs::read_to_string(&args.file).unwrap();
@@ -154,7 +154,7 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
         flip,
     };
 
-    println!("{}", draw::draw_table(&headers, &rows, draw_options));
+    println!("{}", table::draw_table(&headers, &rows, draw_options));
 }
 
 fn sort(values: &mut Vec<Value>, field: &str) {
