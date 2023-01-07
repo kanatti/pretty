@@ -33,8 +33,8 @@ pub struct Header {
 
 #[derive(Debug)]
 pub struct Cell {
-    content: String,
-    cellType: CellType,
+    pub content: String,
+    pub cellType: CellType,
 }
 
 #[derive(Debug)]

@@ -1,5 +1,5 @@
 use std::{
-    cmp,
+    cmp::{self, Ordering},
     collections::{HashMap, HashSet},
     fs, process,
 };
@@ -25,8 +25,6 @@ pub fn run(args: args::Args) {
 
 fn render_json(data: &str, args: &args::Args) {
     let select_path = get_select_path(&args.select);
-
-    println!("Select path is {:?}", select_path);
 
     let value = deserialize(data);
 
@@ -140,6 +138,10 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
         values = flatten(values, &args.flatten);
     }
 
+    if let Some(sort_field) = &args.sort {
+        sort(&mut values, sort_field);
+    }
+
     let headers = get_headers(&values);
 
     let rows: Vec<Vec<Cell>> = values
@@ -153,6 +155,18 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
     };
 
     println!("{}", draw::draw_table(&headers, &rows, draw_options));
+}
+
+fn sort(values: &mut Vec<Value>, field: &str) {
+    values.sort_by(|val1, val2| match (val1, val2) {
+        (Value::Object(val1), Value::Object(val2)) => match (val1.get(field), val2.get(field)) {
+            (Some(a), Some(b)) => to_cell(a).content.cmp(&to_cell(b).content),
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            _ => Ordering::Equal
+        },
+        _ => Ordering::Equal,
+    });
 }
 
 fn flatten(mut values: Vec<Value>, flatten_fields: &Vec<String>) -> Vec<Value> {

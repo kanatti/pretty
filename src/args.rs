@@ -22,7 +22,12 @@ pub struct Args {
     pub select: String,
 
     #[arg(long, value_enum, default_value_t=SelectMode::Auto)]
-    pub select_mode: SelectMode
+    pub select_mode: SelectMode,
+
+    // Support multiple fields and FieldPath later.
+    /// Field to sort by
+    #[arg(long, value_name = "FIELD")]
+    pub sort: Option<String>,
 }
 
 #[derive(clap::ValueEnum, Debug, Copy, Clone)]
