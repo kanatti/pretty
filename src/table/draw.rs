@@ -19,37 +19,37 @@ const VERTICAL_LEFT: char = '├';
 const NEW_LINE: char = '\n';
 
 pub fn draw_table(headers: &[Header], rows: &Vec<Vec<Cell>>, options: DrawOptions) -> String {
-    iter::once(top_border(headers))
-        .chain(iter::once(header_row(headers, &options)))
+    top_border(headers)
+        .chain(header_row(headers, &options))
         .chain(rows.iter().flat_map(|row| {
-            return iter::once(row_seperator(headers))
-                .chain(iter::once(content_row(row, headers, &options)));
+            return row_seperator(headers)
+                .chain(content_row(row, headers, &options));
         }))
-        .chain(iter::once(bottom_border(headers)))
+        .chain(bottom_border(headers))
         .collect::<String>()
 }
 
 // Returns top border of table
 // Example: ┌────────┬────────┬────────┐
-fn top_border(headers: &[Header]) -> String {
+fn top_border(headers: &[Header]) -> impl Iterator<Item = char> + '_ {
     border(headers, LEFT_TOP, HORIZONTAL_DOWN, RIGHT_TOP)
 }
 
 // Returns bottom border of table
 // Example: └────────┴────────┴────────┘
-fn bottom_border(headers: &[Header]) -> String {
+fn bottom_border(headers: &[Header]) -> impl Iterator<Item = char> + '_ {
     border(headers, LEFT_BOTTOM, HORIZONTAL_UP, RIGHT_BOTTOM)
 }
 
 // Returns a seperator between rows
 // Example: ├────────┼────────┼────────┤
-fn row_seperator(headers: &[Header]) -> String {
+fn row_seperator(headers: &[Header]) -> impl Iterator<Item = char> + '_ {
     border(headers, VERTICAL_LEFT, CROSS, VERTICAL_RIGHT)
 }
 
 // Returns a header row
 // Example: │header1 │header2 │header3 │
-fn header_row(headers: &[Header], options: &DrawOptions) -> String {
+fn header_row<'a>(headers: &'a [Header], options: &'a DrawOptions) -> impl Iterator<Item = char>  + 'a {
     iter::once(VERTICAL)
         .chain(headers.iter().flat_map(|header| {
             format_header(&header.name, header.max_width, &options.color)
@@ -58,12 +58,11 @@ fn header_row(headers: &[Header], options: &DrawOptions) -> String {
                 .collect::<Vec<_>>()
         }))
         .chain(iter::once(NEW_LINE))
-        .collect()
 }
 
 // Returns a content row
 // Example: │"value1"│"value2"│"value3"│
-fn content_row(row: &Vec<Cell>, headers: &[Header], options: &DrawOptions) -> String {
+fn content_row<'a>(row: &'a Vec<Cell>, headers: &'a [Header], options: &'a DrawOptions) -> impl Iterator<Item = char> + 'a {
     iter::once(VERTICAL)
         .chain(headers.iter().enumerate().flat_map(|(i, header)| {
             format_cell(&row[i], header.max_width, &options.color)
@@ -72,12 +71,11 @@ fn content_row(row: &Vec<Cell>, headers: &[Header], options: &DrawOptions) -> St
                 .collect::<Vec<_>>()
         }))
         .chain(iter::once(NEW_LINE))
-        .collect()
 }
 
-fn border(headers: &[Header], left: char, mid: char, right: char) -> String {
+fn border(headers: &[Header], left: char, mid: char, right: char) -> impl Iterator<Item = char> + '_ {
     iter::once(left) // Start with :left
-        .chain(headers[..headers.len() - 1].iter().flat_map(|header| {
+        .chain(headers[..headers.len() - 1].iter().flat_map(move |header| {
             (0..header.max_width) // repeat ────────:mid for every header other than last
                 .map(|_| HORIZONTAL)
                 .chain(iter::once(mid))
@@ -85,7 +83,6 @@ fn border(headers: &[Header], left: char, mid: char, right: char) -> String {
         .chain((0..headers.last().unwrap().max_width).map(|_| HORIZONTAL)) // ──────── for last header
         .chain(iter::once(right)) // End with :right
         .chain(iter::once(NEW_LINE))
-        .collect::<String>()
 }
 
 fn format_cell(cell: &Cell, width: usize, color: &Color) -> String {
