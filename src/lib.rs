@@ -4,12 +4,14 @@ use std::{
     fs, process,
 };
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 pub mod args;
 pub mod draw;
+pub mod field_path;
 
-use draw::{Cell, Header, DrawOptions};
+use draw::{Cell, DrawOptions, Header};
+use field_path::{FieldPath, Selector};
 
 pub fn run(args: args::Args) {
     let data = fs::read_to_string(&args.file).unwrap();
@@ -22,16 +24,35 @@ pub fn run(args: args::Args) {
 }
 
 fn render_json(data: &str, args: &args::Args) {
+    let select_path = get_select_path(&args.select);
+
+    println!("Select path is {:?}", select_path);
+
     let value = deserialize(data);
 
     match value {
-        Value::Array(values) => {
+        Value::Array(mut values) => {
+            if !select_path.selectors.is_empty() {
+                match args.select_mode {
+                    args::SelectMode::Only => values = select(values, &select_path),
+                    args::SelectMode::Append => select_append(&mut values, &select_path),
+                    args::SelectMode::Auto => todo!(),
+                }
+            }
+
             render_table(values, &args, false);
         }
         Value::Object(_) => {
             render_table(vec![value], &args, true);
-        },
+        }
         _ => println!("Unexpected path"),
+    }
+}
+
+fn get_select_path(path: &str) -> FieldPath {
+    match FieldPath::parse(path) {
+        Ok(path) => path,
+        Err(error) => exit_with_error(&format!("Invalid select path {}", error)),
     }
 }
 
@@ -41,14 +62,76 @@ fn render_json_lines(data: &str, args: &args::Args) {
     render_table(values, &args, false);
 }
 
+fn select(values: Vec<Value>, path: &FieldPath) -> Vec<Value> {
+    values
+        .into_iter()
+        .map(|value| select_from_value(&value, &path.selectors))
+        .map(|value| json!({ path.path_str: value }))
+        .collect()
+}
+
+fn select_append(values: &mut Vec<Value>, path: &FieldPath) {
+    values
+        .into_iter()
+        .for_each(|value| select_and_append_from_value(value, &path));
+}
+
+fn select_and_append_from_value(value: &mut Value, path: &FieldPath) {
+    let selected = select_from_value(&value, &path.selectors);
+
+    match value {
+        Value::Null => todo!(),
+        Value::Bool(_) => todo!(),
+        Value::Number(_) => todo!(),
+        Value::String(_) => todo!(),
+        Value::Array(_) => todo!(),
+        Value::Object(obj) => {
+            obj.insert(String::from(path.path_str), selected);
+        }
+    }
+}
+
+fn select_from_value<'a>(value: &Value, path: &[Selector]) -> Value {
+    if let Some(selector) = path.first() {
+        match value {
+            Value::Array(arr) => select_from_value(&select_from_array(arr, selector), &path[1..]),
+            Value::Object(obj) => select_from_value(&select_from_obj(obj, selector), &path[1..]),
+            _ => value.clone(),
+        }
+    } else {
+        value.clone()
+    }
+}
+
+fn select_from_array(arr: &Vec<Value>, selector: &Selector) -> Value {
+    match selector {
+        Selector::Field(field) => {
+            exit_with_error(&format!("Can't select field {} from array", field))
+        }
+        Selector::IntoArray(index) => match arr.get(*index) {
+            Some(value) => value.clone(),
+            None => Value::Null,
+        },
+    }
+}
+
+fn select_from_obj(obj: &Map<String, Value>, selector: &Selector) -> Value {
+    match selector {
+        Selector::IntoArray(index) => {
+            exit_with_error(&format!("Can't index at {} from object", index))
+        }
+        Selector::Field(field) => match obj.get(*field) {
+            Some(value) => value.clone(),
+            None => Value::Null,
+        },
+    }
+}
+
 // Handle error better way, that matches Clap style
 fn deserialize(data: &str) -> Value {
     match serde_json::from_str(&data) {
         Ok(value) => value,
-        Err(e) => {
-            eprintln!("Invalid JSON {}", e);
-            process::exit(1)
-        }
+        Err(e) => exit_with_error(&format!("Invalid JSON {}", e)),
     }
 }
 
@@ -66,7 +149,7 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
 
     let draw_options = DrawOptions {
         color: args.color,
-        flip
+        flip,
     };
 
     println!("{}", draw::draw_table(&headers, &rows, draw_options));
@@ -192,4 +275,9 @@ fn to_cell(value: &Value) -> Cell {
         Value::Array(_) => Cell::collapsed(String::from("[..]")),
         Value::Object(_) => Cell::collapsed(String::from("{..}")),
     }
+}
+
+fn exit_with_error(error: &str) -> ! {
+    eprintln!("{}", error);
+    process::exit(1)
 }
