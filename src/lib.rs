@@ -160,10 +160,10 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
 fn sort(values: &mut Vec<Value>, field: &str) {
     values.sort_by(|val1, val2| match (val1, val2) {
         (Value::Object(val1), Value::Object(val2)) => match (val1.get(field), val2.get(field)) {
-            (Some(a), Some(b)) => to_cell(a).content.cmp(&to_cell(b).content),
+            (Some(a), Some(b)) => compare(a, b),
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
-            _ => Ordering::Equal
+            _ => Ordering::Equal,
         },
         _ => Ordering::Equal,
     });
@@ -288,6 +288,31 @@ fn to_cell(value: &Value) -> Cell {
         Value::String(s) => Cell::string(format!("\"{}\"", s)),
         Value::Array(_) => Cell::collapsed(String::from("[..]")),
         Value::Object(_) => Cell::collapsed(String::from("{..}")),
+    }
+}
+
+fn compare(val1: &Value, val2: &Value) -> Ordering {
+    match (val1, val2) {
+        // Null
+        (Value::Null, _) => Ordering::Greater,
+
+        // Bool
+        (Value::Bool(bool1), Value::Bool(bool2)) => bool1.cmp(bool2),
+        (Value::Bool(_), _) => Ordering::Less,
+
+        // Number
+        (Value::Number(n1), Value::Number(n2)) => match n1.as_f64().partial_cmp(&n2.as_f64()) {
+            Some(ordering) => ordering,
+            None => Ordering::Equal,
+        },
+        (Value::Number(_), _) => Ordering::Less,
+
+        // String
+        (Value::String(s1), Value::String(s2)) => s1.cmp(s2),
+        (Value::String(_), _) => Ordering::Less,
+
+        // Array or Object
+        (_, _) => Ordering::Equal,
     }
 }
 
