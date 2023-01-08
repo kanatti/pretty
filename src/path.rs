@@ -1,6 +1,6 @@
 const ARRAY_SELECTOR: &'static str = "[]";
 
-type Result<T> = std::result::Result<T, &'static str>;
+use crate::Result;
 
 // Could be replaced by JsonPath. But keeping it simple for now
 #[derive(Debug)]

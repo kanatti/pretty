@@ -1,128 +1,45 @@
-use std::{
-    cmp::{self, Ordering},
-    collections::{HashMap, HashSet},
-    fs, process,
-};
+use std::{cmp, collections::HashMap, fs, process};
 
-use serde_json::{json, Map, Value};
+use serde_json::Value;
 
+pub mod action;
 pub mod args;
-pub mod table;
 pub mod path;
+pub mod table;
 
+use action::{Action, Flatten, Select, Sort};
 use table::{Cell, DrawOptions, Header};
-use path::{FieldPath, Selector};
+
+pub type Result<T> = std::result::Result<T, &'static str>;
 
 pub fn run(args: args::Args) {
     let data = fs::read_to_string(&args.file).unwrap();
 
-    if args.file.ends_with(".jsonl") {
-        render_json_lines(&data, &args);
+    let result = if args.file.ends_with(".jsonl") {
+        render_json_lines(&data, &args)
     } else {
-        render_json(&data, &args);
+        render_json(&data, &args)
+    };
+
+    if let Err(err) = result {
+        exit_with_error(err);
     }
 }
 
-fn render_json(data: &str, args: &args::Args) {
-    let select_path = get_select_path(&args.select);
-
+fn render_json(data: &str, args: &args::Args) -> Result<()> {
     let value = deserialize(data);
 
     match value {
-        Value::Array(mut values) => {
-            if !select_path.selectors.is_empty() {
-                match args.select_mode {
-                    args::SelectMode::Only => values = select(values, &select_path),
-                    args::SelectMode::Append => select_append(&mut values, &select_path),
-                    args::SelectMode::Auto => todo!(),
-                }
-            }
-
-            render_table(values, &args, false);
-        }
-        Value::Object(_) => {
-            render_table(vec![value], &args, true);
-        }
-        _ => println!("Unexpected path"),
+        Value::Array(values) => Ok(render_table(values, &args, false)?),
+        Value::Object(_) => Ok(render_table(vec![value], &args, true)?),
+        _ => Err("Unexpected path"),
     }
 }
 
-fn get_select_path(path: &str) -> FieldPath {
-    match FieldPath::parse(path) {
-        Ok(path) => path,
-        Err(error) => exit_with_error(&format!("Invalid select path {}", error)),
-    }
-}
-
-fn render_json_lines(data: &str, args: &args::Args) {
+fn render_json_lines(data: &str, args: &args::Args) -> Result<()> {
     let values: Vec<Value> = data.lines().map(|line| deserialize(line)).collect();
 
-    render_table(values, &args, false);
-}
-
-fn select(values: Vec<Value>, path: &FieldPath) -> Vec<Value> {
-    values
-        .into_iter()
-        .map(|value| select_from_value(&value, &path.selectors))
-        .map(|value| json!({ path.path_str: value }))
-        .collect()
-}
-
-fn select_append(values: &mut Vec<Value>, path: &FieldPath) {
-    values
-        .into_iter()
-        .for_each(|value| select_and_append_from_value(value, &path));
-}
-
-fn select_and_append_from_value(value: &mut Value, path: &FieldPath) {
-    let selected = select_from_value(&value, &path.selectors);
-
-    match value {
-        Value::Null => todo!(),
-        Value::Bool(_) => todo!(),
-        Value::Number(_) => todo!(),
-        Value::String(_) => todo!(),
-        Value::Array(_) => todo!(),
-        Value::Object(obj) => {
-            obj.insert(String::from(path.path_str), selected);
-        }
-    }
-}
-
-fn select_from_value<'a>(value: &Value, path: &[Selector]) -> Value {
-    if let Some(selector) = path.first() {
-        match value {
-            Value::Array(arr) => select_from_value(&select_from_array(arr, selector), &path[1..]),
-            Value::Object(obj) => select_from_value(&select_from_obj(obj, selector), &path[1..]),
-            _ => value.clone(),
-        }
-    } else {
-        value.clone()
-    }
-}
-
-fn select_from_array(arr: &Vec<Value>, selector: &Selector) -> Value {
-    match selector {
-        Selector::Field(field) => {
-            exit_with_error(&format!("Can't select field {} from array", field))
-        }
-        Selector::IntoArray(index) => match arr.get(*index) {
-            Some(value) => value.clone(),
-            None => Value::Null,
-        },
-    }
-}
-
-fn select_from_obj(obj: &Map<String, Value>, selector: &Selector) -> Value {
-    match selector {
-        Selector::IntoArray(index) => {
-            exit_with_error(&format!("Can't index at {} from object", index))
-        }
-        Selector::Field(field) => match obj.get(*field) {
-            Some(value) => value.clone(),
-            None => Value::Null,
-        },
-    }
+    Ok(render_table(values, &args, false)?)
 }
 
 // Handle error better way, that matches Clap style
@@ -133,13 +50,17 @@ fn deserialize(data: &str) -> Value {
     }
 }
 
-fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
-    if !args.flatten.is_empty() {
-        values = flatten(values, &args.flatten);
-    }
+fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) -> Result<()> {
+    let actions: Vec<Box<dyn Action>>= vec![
+        Box::new(Select::new(&args.select, args.select_mode)?),
+        Box::new(Flatten {
+            fields: &args.flatten,
+        }),
+        Box::new(Sort { field: &args.sort })
+    ];
 
-    if let Some(sort_field) = &args.sort {
-        sort(&mut values, sort_field);
+    for action in actions.iter() {
+        values = action.apply(values);
     }
 
     let headers = get_headers(&values);
@@ -155,55 +76,8 @@ fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) {
     };
 
     println!("{}", table::draw_table(&headers, &rows, draw_options));
-}
 
-fn sort(values: &mut Vec<Value>, field: &str) {
-    values.sort_by(|val1, val2| match (val1, val2) {
-        (Value::Object(val1), Value::Object(val2)) => match (val1.get(field), val2.get(field)) {
-            (Some(a), Some(b)) => compare(a, b),
-            (Some(_), None) => Ordering::Greater,
-            (None, Some(_)) => Ordering::Less,
-            _ => Ordering::Equal,
-        },
-        _ => Ordering::Equal,
-    });
-}
-
-fn flatten(mut values: Vec<Value>, flatten_fields: &Vec<String>) -> Vec<Value> {
-    let headers = get_header_set(&values);
-
-    // TODO: Change to error and handle gracefully
-    let valid_fields: Vec<&String> = flatten_fields
-        .iter()
-        .filter(|&field| headers.contains(&*field))
-        .collect();
-
-    for field in valid_fields {
-        flatten_values(&mut values, field)
-    }
-
-    values
-}
-
-fn flatten_values(values: &mut Vec<Value>, field: &String) {
-    for value in values.iter_mut() {
-        if let Value::Object(value) = value {
-            let inner = value.remove(field);
-
-            match inner {
-                Some(Value::Object(inner)) => {
-                    for (key, val) in inner.into_iter() {
-                        let new_key = format!("{}.{}", field, key);
-                        value.insert(String::from(new_key), val);
-                    }
-                }
-                Some(val) => {
-                    value.insert(String::from(field), val);
-                }
-                _ => {}
-            }
-        }
-    }
+    Ok(())
 }
 
 fn get_headers(values: &Vec<Value>) -> Vec<Header> {
@@ -234,21 +108,6 @@ fn get_headers(values: &Vec<Value>) -> Vec<Header> {
             name,
         })
         .collect()
-}
-
-fn get_header_set(values: &Vec<Value>) -> HashSet<String> {
-    let mut headers: HashSet<String> = HashSet::new();
-
-    values.iter().for_each(|value| match value {
-        Value::Object(map) => {
-            map.keys().for_each(|key| {
-                headers.insert(String::from(key));
-            });
-        }
-        _ => {}
-    });
-
-    headers
 }
 
 fn len(value: &Value) -> usize {
@@ -288,31 +147,6 @@ fn to_cell(value: &Value) -> Cell {
         Value::String(s) => Cell::string(format!("\"{}\"", s)),
         Value::Array(_) => Cell::collapsed(String::from("[..]")),
         Value::Object(_) => Cell::collapsed(String::from("{..}")),
-    }
-}
-
-fn compare(val1: &Value, val2: &Value) -> Ordering {
-    match (val1, val2) {
-        // Null
-        (Value::Null, _) => Ordering::Greater,
-
-        // Bool
-        (Value::Bool(bool1), Value::Bool(bool2)) => bool1.cmp(bool2),
-        (Value::Bool(_), _) => Ordering::Less,
-
-        // Number
-        (Value::Number(n1), Value::Number(n2)) => match n1.as_f64().partial_cmp(&n2.as_f64()) {
-            Some(ordering) => ordering,
-            None => Ordering::Equal,
-        },
-        (Value::Number(_), _) => Ordering::Less,
-
-        // String
-        (Value::String(s1), Value::String(s2)) => s1.cmp(s2),
-        (Value::String(_), _) => Ordering::Less,
-
-        // Array or Object
-        (_, _) => Ordering::Equal,
     }
 }
 
