@@ -6,6 +6,7 @@ use serde_json::Value;
 
 type FilterExpr = (String, Primitive);
 
+#[derive(Debug)]
 pub enum Primitive {
     Bool(bool),
     String(String),
@@ -24,6 +25,7 @@ impl Primitive {
         for b in expr.bytes() {
             if b == b'.' {
                 dot_count += 1;
+                continue;
             }
 
             if dot_count > 1 {
@@ -45,6 +47,7 @@ impl Primitive {
     }
 }
 
+#[derive(Debug)]
 pub struct Filter {
     pub filter_expr: Option<FilterExpr>,
 }
