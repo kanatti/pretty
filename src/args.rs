@@ -28,6 +28,10 @@ pub struct Args {
     /// Field to sort by
     #[arg(long, value_name = "FIELD")]
     pub sort: Option<String>,
+
+    /// Filter expression
+    #[arg(long, value_name = "FIELD=VALUE")]
+    pub filter: Option<String>
 }
 
 #[derive(clap::ValueEnum, Debug, Copy, Clone)]

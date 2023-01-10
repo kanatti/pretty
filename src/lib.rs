@@ -7,7 +7,7 @@ pub mod args;
 pub mod path;
 pub mod table;
 
-use action::{Action, Flatten, Select, Sort};
+use action::{Action, Filter, Flatten, Select, Sort};
 use table::{Cell, DrawOptions, Header};
 
 pub type Result<T> = std::result::Result<T, &'static str>;
@@ -51,16 +51,21 @@ fn deserialize(data: &str) -> Value {
 }
 
 fn render_table(mut values: Vec<Value>, args: &args::Args, flip: bool) -> Result<()> {
-    let actions: Vec<Box<dyn Action>>= vec![
+    let actions: Vec<Box<dyn Action>> = vec![
+        Box::new(Filter::parse(&args.filter)?),
         Box::new(Select::new(&args.select, args.select_mode)?),
         Box::new(Flatten {
             fields: &args.flatten,
         }),
-        Box::new(Sort { field: &args.sort })
+        Box::new(Sort { field: &args.sort }),
     ];
 
     for action in actions.iter() {
         values = action.apply(values);
+    }
+
+    if values.is_empty() {
+        return Ok(());
     }
 
     let headers = get_headers(&values);

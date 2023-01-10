@@ -21,6 +21,7 @@ Options:
   -s, --select <SELECT>            [default: .]
       --select-mode <SELECT_MODE>  [default: auto] [possible values: only, append, auto]
       --sort <FIELD>               Field to sort by
+      --filter <FIELD=VALUE>       Filter expression
   -h, --help                       Print help information
   -V, --version                    Print version information
 ```
@@ -75,6 +76,16 @@ $ pretty samples/test2.json --sort age
 ├─────────────────┼───────┼──────────────┼──────┼───────┤
 │"Madame Uppercut"│null   │"Jane Wilson" │[..]  │{..}   │
 └─────────────────┴───────┴──────────────┴──────┴───────┘
+
+# Filter only supports equals for now
+$ pretty samples/test2.json --filter 'age=29'
+
+┌──────────────┬───┬──────────────┬──────┬───────┐
+│name          │age│secretIdentity│powers│address│
+├──────────────┼───┼──────────────┼──────┼───────┤
+│"Molecule Man"│29 │"Dan Jukes"   │[..]  │{..}   │
+└──────────────┴───┴──────────────┴──────┴───────┘
+
 
 ```
 
